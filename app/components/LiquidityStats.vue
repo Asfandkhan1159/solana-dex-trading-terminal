@@ -28,7 +28,7 @@ const fetchStats = async () => {
     stats.value = data
     lastUpdate.value = new Date()
     
-    console.log('📊 Liquidity stats updated:', data)
+    console.log(' Liquidity stats updated:', data)
   } catch (error) {
     console.error('Failed to fetch stats:', error)
   } finally {

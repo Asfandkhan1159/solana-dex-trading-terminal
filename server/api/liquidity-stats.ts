@@ -8,12 +8,12 @@ export default defineEventHandler(async (event) => {
 
     if (cachedStats && (now - lastFetch < CACHE_TIME)) {
         const age = Math.floor((now - lastFetch) / 1000)
-        console.log(`💾 Using cached stats (${age}s old)`)
+        console.log(` Using cached stats (${age}s old)`)
         return cachedStats
     }
 
     try {
-        console.log('🔄 Fetching Birdeye market overview...')
+        console.log(' Fetching Birdeye market overview...')
 
         const response = await $fetch<{
             data?: {
@@ -42,20 +42,20 @@ export default defineEventHandler(async (event) => {
 
         lastFetch = now
 
-        console.log('✅ Birdeye stats:', cachedStats)
+        console.log(' Birdeye stats:', cachedStats)
 
         return cachedStats
 
     } catch (error: any) {
-        console.warn('⚠️ Birdeye stats failed:', error.message)
+        console.warn(' Birdeye stats failed:', error.message)
 
         if (cachedStats) {
             const age = Math.floor((now - lastFetch) / 1000)
-            console.log(`💾 Using stale cache (${age}s old)`)
+            console.log(` Using stale cache (${age}s old)`)
             return cachedStats
         }
 
-        console.log('🎲 Using mock stats')
+        console.log(' Using mock stats')
         cachedStats = {
             tvl: 8147494971,
             volume24h: 8088935016,

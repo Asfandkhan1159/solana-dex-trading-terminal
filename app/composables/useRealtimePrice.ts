@@ -16,7 +16,7 @@ export const useRealtimePrice = () => {
 
             ws.onopen = () => {
                 connected.value = true
-                console.log('✅ WebSocket connected')
+                console.log(' WebSocket connected')
             }
 
             ws.onmessage = (event) => {
@@ -34,7 +34,7 @@ export const useRealtimePrice = () => {
             }
 
             ws.onerror = (error) => {
-                console.error('❌ WebSocket error:', error)
+                console.error(' WebSocket error:', error)
                 connected.value = false
             }
 

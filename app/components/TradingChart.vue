@@ -58,7 +58,7 @@ const fetchHistoricalData = async (days: number) => {
     low24h.value = Math.min(...prices)
     lastUpdate.value = new Date()
     
-    console.log('📊 Loaded', chartData.value.length, 'candles from Binance')
+    console.log('Loaded', chartData.value.length, 'candles from Binance')
   } catch (error) {
     console.error('Failed to load chart:', error)
   } finally {
@@ -94,7 +94,7 @@ const fetchLivePrice = async () => {
       
       lastUpdate.value = new Date()
       
-      console.log(`💹 Price update: $${newPrice.toFixed(2)}`)
+      console.log(` Price update: $${newPrice.toFixed(2)}`)
     }
   } catch (error) {
     console.error('Live price failed:', error)
@@ -105,7 +105,7 @@ const fetchLivePrice = async () => {
 const startLiveUpdates = () => {
   if (updateInterval) return
   
-  console.log('▶️ Starting live updates...')
+  console.log(' Starting live updates...')
   isLive.value = true
   
 
@@ -123,7 +123,7 @@ const stopLiveUpdates = () => {
     updateInterval = null
   }
   isLive.value = false
-  console.log('⏸️ Live updates stopped')
+  console.log(' Live updates stopped')
 }
 
 const toggleLive = () => {

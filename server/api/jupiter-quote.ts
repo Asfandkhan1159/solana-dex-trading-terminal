@@ -37,19 +37,19 @@ export default defineEventHandler(async (event) => {
             timeout: 5000
         })
 
-        console.log('✅ Jupiter success')
+        console.log(' Jupiter success')
         return response
 
     } catch (jupiterError: any) {
-        console.warn('⚠️ Jupiter unavailable, using Birdeye')
+        console.warn(' Jupiter unavailable, using Birdeye')
 
-        // ✅ USE BIRDEYE INSTEAD OF COINGECKO
+        // USE BIRDEYE INSTEAD OF COINGECKO
         const now = Date.now()
 
         try {
             // Only fetch if cache expired
             if (now - lastBirdeyeFetch > BIRDEYE_CACHE_TIME) {
-                console.log('🔄 Fetching Birdeye prices...')
+                console.log(' Fetching Birdeye prices...')
 
                 // Fetch SOL price
                 const solPrice = await $fetch<{ data?: { value?: number } }>('https://public-api.birdeye.so/defi/price', {
@@ -66,12 +66,12 @@ export default defineEventHandler(async (event) => {
                 cachedPrices['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'] = 1 // USDC is always $1
 
                 lastBirdeyeFetch = now
-                console.log('✅ Birdeye prices:', cachedPrices)
+                console.log(' Birdeye prices:', cachedPrices)
             } else {
-                console.log('💾 Using cached Birdeye prices')
+                console.log(' Using cached Birdeye prices')
             }
         } catch (birdeyeError) {
-            console.warn('⚠️ Birdeye failed, using stale cache:', birdeyeError)
+            console.warn(' Birdeye failed, using stale cache:', birdeyeError)
         }
 
         // Calculate swap
@@ -87,7 +87,7 @@ export default defineEventHandler(async (event) => {
         const humanOutput = humanInput * exchangeRate
         const outputAmount = Math.floor(humanOutput * Math.pow(10, outputDecimals))
 
-        console.log('💱 Swap:', {
+        console.log(' Swap:', {
             input: `${humanInput.toFixed(4)} @ $${inputPrice}`,
             output: `${humanOutput.toFixed(4)} @ $${outputPrice}`,
             outputLamports: outputAmount

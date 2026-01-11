@@ -1,227 +1,283 @@
 <script setup lang="ts">
-const dexStore = useDexStore()
-const hoveredCandle = ref<number | null>(null)
-const isLoading= ref(false)
-const timeframe = ref('15m')
-const timeframes = ['1m', '5m', '15m', '1H', '4H', '1D'] as const 
+const isLoading = ref(true)
+const selectedTimeframe = ref('1H')
+const isLive = ref(true) // Live mode btn
 
-const priceRange = computed(() => {
-  if (dexStore.chartData.length === 0) {
-    return { min: 140, max: 160 }
-  }
-  
-  const prices = dexStore.chartData.flatMap(c => [c.high, c.low])
-  return {
-    min: Math.min(...prices) * 0.995,
-    max: Math.max(...prices) * 1.005
-  }
-})
-
-const maxVolume = computed(() => {
-  if (dexStore.chartData.length === 0) return 1000000
-  return Math.max(...dexStore.chartData.map(c => c.volume))
-})
-
-const getCandleHeight = (candle: any) => {
-  const range = priceRange.value.max - priceRange.value.min
-  const bodyHeight = Math.abs(candle.close - candle.open)
-  return (bodyHeight / range) * 100
+interface PricePoint {
+  time: number
+  value: number
 }
 
-const getCandlePosition = (price: number) => {
-  const range = priceRange.value.max - priceRange.value.min
-  return ((priceRange.value.max - price) / range) * 100
-}
+const chartData = ref<PricePoint[]>([])
+const currentPrice = ref(0)
+const priceChange = ref(0)
+const high24h = ref(0)
+const low24h = ref(0)
+const lastUpdate = ref<Date>(new Date())
 
-const getVolumeHeight = (volume: number) => {
-  return (volume / maxVolume.value) * 100
-}
+let updateInterval: NodeJS.Timeout | null = null
 
-const currentPrice = computed(() => {
-  if (dexStore.chartData.length === 0) return 150
-  
-  const lastCandle = dexStore.chartData[dexStore.chartData.length - 1]
-  return lastCandle?.close ?? 150
-})
+const timeframes = [
+  { label: '1H', value: '1H', days: 1 },
+  { label: '4H', value: '4H', days: 1 },
+  { label: '1D', value: '1D', days: 7 },
+]
 
-const priceChange = computed(() => {
-  if (dexStore.chartData.length < 2) return 0
-  
-  const first = dexStore.chartData[0]?.close ?? 0
-  const last = dexStore.chartData[dexStore.chartData.length - 1]?.close ?? 0
-  
-  return ((last - first) / first) * 100
-})
-
-const handleTimeChange = async (tf :typeof timeframes[number]) =>{
+const fetchHistoricalData = async (days: number) => {
   isLoading.value = true
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-  dexStore.updateTimeframe(tf)
-  timeframe.value = tf
-  isLoading.value = false
+  
+  try {
+    const interval = days === 7 ? '1h' : '5m'
+    const limit = days === 7 ? 168 : 288 // 7 days or 1 day
+    
+    const response = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=${interval}&limit=${limit}`
+    )
+    const data = await response.json()
+    
+    if (!Array.isArray(data) || data.length === 0) {
+      console.error('No data from Binance')
+      return
+    }
+    
+    chartData.value = data.map((candle: any[]) => ({
+  time: Math.floor(candle[0] / 1000),
+  value: parseFloat(candle[4])
+}))
+    
+   
+    const prices = data.map((c: any[]) => parseFloat(c[4]))
+    if (prices.length === 0) {
+  console.error('No prices available')
+  return
+}
+    currentPrice.value = prices[prices.length - 1] || 0
+    const firstPrice = prices[0] || currentPrice.value
+    priceChange.value = ((currentPrice.value - firstPrice) / firstPrice) * 100
+    high24h.value = Math.max(...prices)
+    low24h.value = Math.min(...prices)
+    lastUpdate.value = new Date()
+    
+    console.log('📊 Loaded', chartData.value.length, 'candles from Binance')
+  } catch (error) {
+    console.error('Failed to load chart:', error)
+  } finally {
+    isLoading.value = false
+  }
 }
 
+
+const fetchLivePrice = async () => {
+  try {
+    const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT')
+    const data = await response.json()
+    
+    const newPrice = parseFloat(data.price)
+    
+    if (newPrice !== currentPrice.value) {
+      const oldPrice = currentPrice.value
+      currentPrice.value = newPrice
+      
+      // Add to chart
+      const now = Math.floor(Date.now() / 1000)
+      chartData.value.push({
+        time: now,
+        value: newPrice
+      })
+      
+      if (chartData.value.length > 100) {
+        chartData.value.shift()
+      }
+      
+      if (newPrice > high24h.value) high24h.value = newPrice
+      if (newPrice < low24h.value) low24h.value = newPrice
+      
+      lastUpdate.value = new Date()
+      
+      console.log(`💹 Price update: $${newPrice.toFixed(2)}`)
+    }
+  } catch (error) {
+    console.error('Live price failed:', error)
+  }
+}
+
+// Start/stop live updates
+const startLiveUpdates = () => {
+  if (updateInterval) return
+  
+  console.log('▶️ Starting live updates...')
+  isLive.value = true
+  
+
+  updateInterval = setInterval(() => {
+    fetchLivePrice()
+  }, 10000) 
+  
+ 
+  fetchLivePrice()
+}
+
+const stopLiveUpdates = () => {
+  if (updateInterval) {
+    clearInterval(updateInterval)
+    updateInterval = null
+  }
+  isLive.value = false
+  console.log('⏸️ Live updates stopped')
+}
+
+const toggleLive = () => {
+  if (isLive.value) {
+    stopLiveUpdates()
+  } else {
+    startLiveUpdates()
+  }
+}
+
+const changeTimeframe = async (tf: typeof timeframes[number]) => {
+  selectedTimeframe.value = tf.value
+  stopLiveUpdates()
+  await fetchHistoricalData(tf.days)
+  if (selectedTimeframe.value === '1H') {
+    startLiveUpdates()
+  }
+}
+
+const timeSinceUpdate = computed(() => {
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - lastUpdate.value.getTime()) / 1000)
+  if (diff < 60) return `${diff}s ago`
+  return `${Math.floor(diff / 60)}m ago`
+})
+
+const maxPrice = computed(() => Math.max(...chartData.value.map(p => p.value)))
+const minPrice = computed(() => Math.min(...chartData.value.map(p => p.value)))
+const priceRange = computed(() => maxPrice.value - minPrice.value || 1)
+onMounted(() => {
+  fetchHistoricalData(1)
+  startLiveUpdates()
+})
+
+onUnmounted(() => {
+  stopLiveUpdates()
+})
 </script>
 
 <template>
-  <div class="w-full h-full flex flex-col bg-card relative">
-    
+  <div class="bg-card border border-white/10 rounded-2xl p-6 shadow-xl">
     <!-- Header -->
-    <div class="flex justify-between items-center px-6 pt-6 pb-4 border-b border-white/5">
-      <div class="flex items-center gap-4">
-        <div class="flex items-center gap-2">
-          <span class="text-2xl font-black">SOL/USDC</span>
-          <span 
-            class="text-sm font-mono px-2 py-1 rounded"
-            :class="priceChange >= 0 ? 'text-green bg-green/10' : 'text-red bg-red/10'"
+    <div class="flex justify-between items-start mb-6">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm text-gray-500 uppercase tracking-wider">SOL/USDC</span>
+          
+         
+          <button 
+            @click="toggleLive"
+            class="px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all"
+            :class="isLive 
+              ? 'bg-green/10 text-green hover:bg-green/20' 
+              : 'bg-gray-500/10 text-gray-500 hover:bg-gray-500/20'"
           >
+            <span class="inline-flex items-center gap-1">
+              <span v-if="isLive" class="w-2 h-2 rounded-full bg-green animate-pulse" />
+              <span v-else class="w-2 h-2 rounded-full bg-gray-500" />
+              {{ isLive ? 'LIVE' : 'PAUSED' }}
+            </span>
+          </button>
+          
+          
+          <span v-if="isLive" class="text-[10px] text-gray-500">
+            {{ timeSinceUpdate }}
+          </span>
+        </div>
+        
+        <!-- Current Price with animation -->
+        <div 
+          class="text-3xl font-black text-white font-mono transition-all duration-300"
+          :class="{ 'scale-110': isLive }"
+        >
+          ${{ currentPrice.toFixed(2) }}
+        </div>
+        
+       
+        <div 
+          class="text-sm font-bold mt-1 transition-colors duration-300"
+          :class="priceChange >= 0 ? 'text-green' : 'text-red'"
+        >
+          <span class="inline-flex items-center gap-1">
+            <div v-if="priceChange >= 0" class="i-ph-arrow-up-bold w-4 h-4" />
+            <div v-else class="i-ph-arrow-down-bold w-4 h-4" />
             {{ priceChange >= 0 ? '+' : '' }}{{ priceChange.toFixed(2) }}%
           </span>
         </div>
-        <div class="flex flex-col text-xs text-gray-500">
-          <span class="text-2xl font-bold text-white">${{ currentPrice.toFixed(2) }}</span>
-          <span class="font-mono">Last 24h</span>
-        </div>
       </div>
+
       
-      <div class="flex gap-1">
-        <button 
-          v-for="tf in timeframes" 
-          :key="tf"
-          @click="handleTimeChange(tf)"
-          class="text-xs px-3 py-1.5 rounded-lg transition-all font-mono"
-          :class="timeframe === tf 
-            ? 'bg-accent text-black font-bold' 
-            : 'text-gray-400 hover:text-white hover:bg-white/5'"
+      <div class="flex gap-1 bg-bg/50 p-1 rounded-lg">
+        <button
+          v-for="tf in timeframes"
+          :key="tf.value"
+          @click="changeTimeframe(tf)"
+          :disabled="isLoading"
+          class="px-3 py-1.5 rounded text-xs font-bold transition-all duration-200"
+          :class="selectedTimeframe === tf.value 
+            ? 'bg-accent text-black shadow-lg shadow-accent/20' 
+            : 'text-gray-500 hover:text-white disabled:opacity-50'"
         >
-          {{ tf }}
+          {{ tf.label }}
         </button>
       </div>
     </div>
 
-    <!-- Chart Area -->
-    <div class="flex-1 relative px-6 py-6 overflow-hidden">
+    
+    <div class="relative h-48 bg-bg/30 rounded-lg overflow-hidden">
       
-      <!-- Candlesticks Container -->
-      <div class="h-full flex items-end justify-between gap-1 pb-8">
-        <div 
-          v-for="(candle, idx) in dexStore.chartData" 
-          :key="idx"
-          class="flex-1 h-full flex flex-col justify-end items-center group cursor-crosshair relative"
-          @mouseenter="hoveredCandle = idx"
-          @mouseleave="hoveredCandle = null"
+      <div v-if="isLoading" class="absolute inset-0 flex items-center justify-center backdrop-blur-sm z-10">
+        <div class="i-ph-circle-notched-bold w-8 h-8 text-accent animate-spin" />
+      </div>
+
+      
+      <div v-else-if="chartData.length > 0" class="h-full flex items-end justify-between gap-px p-4">
+        <div
+          v-for="(point, i) in chartData"
+          :key="point.time"
+          class="flex-1 bg-gradient-to-t from-accent/30 to-accent rounded-t-sm transition-all duration-500 hover:from-accent/50 hover:to-accent/80 relative group cursor-pointer"
+          :class="{ 'animate-pulse': i === chartData.length - 1 && isLive }"
+          :style="{ height: ((point.value - minPrice) / priceRange) * 100 + '%' }"
         >
-          <!-- Candle Visualization -->
-          <div class="relative flex flex-col items-center" :style="{ height: '85%' }">
-            
-            <!-- High Wick -->
-            <div 
-              class="w-[2px] transition-all"
-              :class="candle.close >= candle.open ? 'bg-green' : 'bg-red'"
-              :style="{ 
-                height: ((candle.high - Math.max(candle.open, candle.close)) / (priceRange.max - priceRange.min)) * 100 + '%'
-              }"
-            />
-            
-            <!-- Candle Body -->
-            <div 
-              class="w-full max-w-[14px] transition-all duration-200"
-              :class="[
-                candle.close >= candle.open 
-                  ? 'bg-green hover:bg-green/80' 
-                  : 'bg-red hover:bg-red/80',
-                hoveredCandle === idx ? 'ring-2 ring-white/50 scale-110' : ''
-              ]"
-              :style="{ 
-                height: (Math.abs(candle.close - candle.open) / (priceRange.max - priceRange.min)) * 100 + '%',
-                minHeight: '3px'
-              }"
-            />
-            
-            <!-- Low Wick -->
-            <div 
-              class="w-[2px] transition-all"
-              :class="candle.close >= candle.open ? 'bg-green' : 'bg-red'"
-              :style="{ 
-                height: ((Math.min(candle.open, candle.close) - candle.low) / (priceRange.max - priceRange.min)) * 100 + '%'
-              }"
-            />
+         
+          <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+            <div class="bg-black/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/10 whitespace-nowrap shadow-xl">
+              <div class="text-xs text-gray-400">
+                {{ new Date(point.time * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) }}
+              </div>
+              <div class="text-sm font-bold text-white font-mono">${{ point.value.toFixed(2) }}</div>
+            </div>
           </div>
-          
-          <!-- Hover Tooltip -->
-       
-<div 
-  v-if="hoveredCandle === idx"
-  class="absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-bg border border-accent/30 rounded-lg p-3 text-[11px] font-mono whitespace-nowrap z-50 shadow-xl shadow-black/50 pointer-events-none"
->
-  <div class="flex flex-col gap-1">
-    <div class="text-accent font-bold border-b border-white/10 pb-1 mb-1">{{ candle.time }}</div>
-    <div class="flex justify-between gap-6">
-      <span class="text-gray-500">Open:</span>
-      <span class="text-white font-bold">${{ candle.open.toFixed(2) }}</span>
-    </div>
-    <div class="flex justify-between gap-6">
-      <span class="text-gray-500">High:</span>
-      <span class="text-green font-bold">${{ candle.high.toFixed(2) }}</span>
-    </div>
-    <div class="flex justify-between gap-6">
-      <span class="text-gray-500">Low:</span>
-      <span class="text-red font-bold">${{ candle.low.toFixed(2) }}</span>
-    </div>
-    <div class="flex justify-between gap-6">
-      <span class="text-gray-500">Close:</span>
-      <span :class="candle.close >= candle.open ? 'text-green' : 'text-red'" class="font-bold">
-        ${{ candle.close.toFixed(2) }}
-      </span>
-    </div>
-    <div class="flex justify-between gap-6 pt-1 border-t border-white/10">
-      <span class="text-gray-500">Volume:</span>
-      <span class="text-accent font-bold">{{ (candle.volume / 1000).toFixed(0) }}K</span>
-    </div>
-  </div>
-  
-  <!-- Little arrow pointing to candle -->
-  <div class="absolute right-full top-1/2 -translate-y-1/2 mr-[-1px] w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent border-r-accent/30"></div>
-</div>
         </div>
       </div>
 
-      <!-- Price Axis (Right) -->
-      <div class="absolute right-0 top-6 bottom-8 w-20 flex flex-col justify-between text-[11px] font-mono text-gray-500 pr-2">
-        <span class="text-green font-bold">${{ priceRange.max.toFixed(2) }}</span>
-        <span class="text-white">${{ ((priceRange.max + priceRange.min) / 2).toFixed(2) }}</span>
-        <span class="text-red font-bold">${{ priceRange.min.toFixed(2) }}</span>
-      </div>
-
-      <!-- Time Labels -->
-      <div class="absolute bottom-0 left-6 right-24 flex justify-between text-[10px] font-mono text-gray-500">
-        <span>{{ dexStore.chartData[0]?.time }}</span>
-        <span>{{ dexStore.chartData[Math.floor(dexStore.chartData.length / 2)]?.time }}</span>
-        <span>{{ dexStore.chartData[dexStore.chartData.length - 1]?.time }}</span>
-      </div>
-
-      <!-- Grid Lines (Optional) -->
-      <div class="absolute inset-0 pointer-events-none opacity-10">
-        <div class="h-full flex flex-col justify-between">
-          <div class="h-[1px] bg-white/20"></div>
-          <div class="h-[1px] bg-white/20"></div>
-          <div class="h-[1px] bg-white/20"></div>
-        </div>
+      
+      <div v-else class="absolute inset-0 flex items-center justify-center">
+        <div class="text-gray-500 text-sm">Failed to load chart data</div>
       </div>
     </div>
 
-    <!-- Watermark -->
-    <div class="absolute bottom-2 right-24 text-[8px] text-gray-700 font-mono opacity-40 pointer-events-none">
-      MOCK DATA • PROTOTYPE
+    
+    <div class="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/5">
+      <div>
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">24h High</div>
+        <div class="text-lg font-bold text-green font-mono">${{ high24h.toFixed(2) }}</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">24h Low</div>
+        <div class="text-lg font-bold text-red font-mono">${{ low24h.toFixed(2) }}</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Data Points</div>
+        <div class="text-lg font-bold text-white font-mono">{{ chartData.length }}</div>
+      </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-</style>

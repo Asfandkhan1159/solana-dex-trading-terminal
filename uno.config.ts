@@ -4,7 +4,6 @@ export default defineConfig({
     presets: [
         presetUno(),
         presetIcons({
-            prefix: 'i-',
             extraProperties: {
                 'display': 'inline-block',
                 'vertical-align': 'middle',
@@ -13,13 +12,12 @@ export default defineConfig({
     ],
     theme: {
         colors: {
-            bg: '#0f0f17',
-            card: '#1a1a2e',
-            text: '#e0e0ff',
-            accent: '#a855f7',
-            green: '#22c55e',
+            bg: '#0a0a0a',      // ✅ Darker background
+            card: '#141414',    // ✅ Card background
+            accent: '#c084fc',
+            text: '#e5e7eb',
+            green: '#10b981',
             red: '#ef4444',
         },
     },
-    safelist: ['text-red', 'text-green', 'bg-accent', 'bg-card', 'bg-bg', 'text-white'],
 })

@@ -28,11 +28,10 @@ const fetchOrderbook = async () => {
   }
 }
 
-// Load on mount
+
 onMounted(() => {
   fetchOrderbook()
-  // Refresh every 10 seconds
-  setInterval(fetchOrderbook, 10000)
+  setInterval(fetchOrderbook, 300000)
 })
 
 const spread = computed(() => {
@@ -73,7 +72,7 @@ const maxBidAmount = computed(() => {
       </div>
     </div>
 
-    <!-- Spread Info -->
+    
     <div class="bg-bg/50 rounded-lg p-3 mb-4">
       <div class="flex justify-between items-center">
         <span class="text-xs text-gray-500">Spread</span>
@@ -84,7 +83,7 @@ const maxBidAmount = computed(() => {
       </div>
     </div>
 
-    <!-- Column Headers -->
+    
     <div class="grid grid-cols-3 px-4 py-2 text-[10px] text-gray-500 uppercase tracking-wider font-bold border-b border-white/5">
       <span>Price (USDC)</span>
       <span class="text-right">Amount (SOL)</span>
@@ -113,7 +112,7 @@ const maxBidAmount = computed(() => {
       </div>
     </div>
 
-    <!-- Mid Price -->
+    
     <div class="py-3 text-center border-y border-white/10">
       <div class="text-lg font-black text-white font-mono">
         ${{ bids[0]?.price.toFixed(2) || '0.00' }}

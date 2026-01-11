@@ -1,0 +1,26 @@
+{
+  "name": "solana-dex",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.11.3",
+    "@solana/web3.js": "^1.98.4",
+    "@unocss/nuxt": "^66.5.11",
+    "nuxt": "^4.2.2",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.26",
+    "vue-tsc": "^3.2.2",
+    "zod": "^4.3.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

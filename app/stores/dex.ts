@@ -334,8 +334,12 @@ export const useDexStore = defineStore('dex', () => {
     }
 
     const isSwapping = ref(false)
-
+    // just for vercel deployment, will fix in the next push
     const executeSwap = async (): Promise<ExecuteSwapResult> => {
+        if (!process.client) {
+            throw new Error('Swap is client-only')
+        }
+
         const wallet = usePhantomWallet()
 
         if (!wallet.connected.value || !wallet.publicKey.value) {
@@ -363,11 +367,18 @@ export const useDexStore = defineStore('dex', () => {
 
             const { swapTransaction } = await response.json()
 
-            const { VersionedTransaction } = await import('@solana/web3.js')
+            let VersionedTransaction: any
+
+            if (process.client) {
+                const solana = await import('@solana/web3.js')
+                VersionedTransaction = solana.VersionedTransaction
+            } else {
+                throw new Error('Solana SDK loaded on server')
+            }
             const txBuf = Buffer.from(swapTransaction, 'base64')
             const transaction = VersionedTransaction.deserialize(txBuf)
 
-            console.log('✍️ Signing transaction...')
+            console.log('Signing transaction...')
 
             await wallet.signTransaction(transaction)
 

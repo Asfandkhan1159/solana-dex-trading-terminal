@@ -1,38 +1,11 @@
 <script setup lang="ts">
-interface OrderRow {
-  price: number
-  amount: number
-  total: number
-}
+const dexStore = useDexStore()
+const { marketData } = storeToRefs(dexStore)
 
-const asks = ref<OrderRow[]>([])
-const bids = ref<OrderRow[]>([])
-const isLoading = ref(true)
-
-
-const fetchOrderbook = async () => {
-  isLoading.value = true
-  try {
-    const data: any = await $fetch('/api/orderbook', {
-      query: { pair: 'SOL/USDC' }
-    })
-    
-    asks.value = data.asks || []
-    bids.value = data.bids || []
-    
-    console.log(' Orderbook loaded:', asks.value.length, 'asks,', bids.value.length, 'bids')
-  } catch (error) {
-    console.error(' Failed to fetch orderbook:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-
-onMounted(() => {
-  fetchOrderbook()
-  setInterval(fetchOrderbook, 300000)
-})
+// ✅ No API calls - just read from store
+const asks = computed(() => marketData.value.orderbook.asks || [])
+const bids = computed(() => marketData.value.orderbook.bids || [])
+const isLoading = computed(() => marketData.value.isLoading)
 
 const spread = computed(() => {
   if (asks.value.length === 0 || bids.value.length === 0) return 0
@@ -51,12 +24,12 @@ const spreadPercent = computed(() => {
 
 const maxAskAmount = computed(() => {
   if (asks.value.length === 0) return 1
-  return Math.max(...asks.value.map(a => a.amount))
+  return Math.max(...asks.value.map((a: any) => a.amount))
 })
 
 const maxBidAmount = computed(() => {
   if (bids.value.length === 0) return 1
-  return Math.max(...bids.value.map(b => b.amount))
+  return Math.max(...bids.value.map((b: any) => b.amount))
 })
 </script>
 

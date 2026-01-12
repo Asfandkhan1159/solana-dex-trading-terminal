@@ -5,11 +5,10 @@ import {
     getTokenMint,
     getTokenDecimals,
     getAllTokens,
-    getTokenInfo,
     type TokenInfo,
-    type SupportedTokenSymbol
 } from '../types/tokens'
 import { usePhantomWallet } from '../composables/usePhantomWallet'
+
 const JUPITER_API_URL = 'https://quote-api.jup.ag/v6'
 
 interface JupiterQuote {
@@ -37,9 +36,8 @@ interface JupiterQuote {
     }>
 }
 
-
-
 type Timeframe = '1m' | '5m' | '15m' | '1H' | '4H' | '1D'
+
 interface ExecuteSwapResult {
     success: boolean
     amount: string
@@ -56,10 +54,32 @@ interface Candle {
 }
 
 interface OrderBookRow {
-    price: number,
-    amount: number,
+    price: number
+    amount: number
     total: number
 }
+
+interface OrderBookData {
+    asks: OrderBookRow[]
+    bids: OrderBookRow[]
+}
+
+interface MarketStats {
+    tvl: number
+    volume24h: number
+    trades24h: number
+    liquidity: number
+}
+
+interface MarketData {
+    price: number
+    orderbook: OrderBookData
+    stats: MarketStats
+    lastFetch: number
+    isLoading: boolean
+    error: string | null
+}
+
 export const useDexStore = defineStore('dex', () => {
     const tokens = ref<TokenInfo[]>(getAllTokens())
     const walletBalances = ref<Record<string, number>>({
@@ -67,14 +87,12 @@ export const useDexStore = defineStore('dex', () => {
         'USDC': 1000.0,
         'RAY': 0.0
     })
+
     const maxBalance = computed(() => {
         return walletBalances.value[fromToken.value.symbol] || 0
     })
 
-
-
     const inputError = ref<string | null>(null)
-
     const fromToken = ref<TokenInfo>(tokens.value.find((t) => t.symbol === 'SOL')!)
     const toToken = ref<TokenInfo>(tokens.value.find((t) => t.symbol === 'USDC')!)
     const fromAmount = ref('1.25')
@@ -85,10 +103,102 @@ export const useDexStore = defineStore('dex', () => {
     const currentQuote = ref<JupiterQuote | null>(null)
     const lastQuoteTime = ref<number>(0)
 
-
     const estimatedTo = ref('0.00')
     const priceImpactValue = ref(0.1)
     const priceImpact = computed(() => priceImpactValue.value)
+
+    const marketData = ref<MarketData>({
+        price: 0,
+        orderbook: {
+            asks: [],
+            bids: []
+        },
+        stats: {
+            tvl: 0,
+            volume24h: 0,
+            trades24h: 0,
+            liquidity: 0
+        },
+        lastFetch: 0,
+        isLoading: false,
+        error: null
+    })
+
+    const fetchAllMarketData = async () => {
+        const now = Date.now()
+        const CACHE_TIME = 300000 // 5 minutes
+
+        if (now - marketData.value.lastFetch < CACHE_TIME) {
+            const age = Math.floor((now - marketData.value.lastFetch) / 1000)
+            console.log(` Using cached market data (${age}s old)`)
+            return
+        }
+
+        marketData.value.isLoading = true
+        marketData.value.error = null
+
+        try {
+            console.log('Fetching unified market data...')
+
+
+            const data = await $fetch<{
+                price: number
+                tvl: number
+                volume24h: number
+                trades24h: number
+                liquidity: number
+            }>('/api/market-data')
+
+
+            const currentPrice = data.price
+
+            const asks = Array.from({ length: 12 }, (_, i) => {
+                const price = currentPrice + (i * 0.5) + 0.1
+                const amount = (Math.random() * 10 + 1)
+                return {
+                    price: parseFloat(price.toFixed(2)),
+                    amount: parseFloat(amount.toFixed(3)),
+                    total: parseFloat((price * amount).toFixed(2))
+                }
+            }).reverse()
+
+            const bids = Array.from({ length: 12 }, (_, i) => {
+                const price = currentPrice - (i * 0.5) - 0.1
+                const amount = (Math.random() * 10 + 1)
+                return {
+                    price: parseFloat(price.toFixed(2)),
+                    amount: parseFloat(amount.toFixed(3)),
+                    total: parseFloat((price * amount).toFixed(2))
+                }
+            })
+
+            marketData.value.price = data.price
+            marketData.value.orderbook = { asks, bids }
+            marketData.value.stats = {
+                tvl: data.tvl,
+                volume24h: data.volume24h,
+                trades24h: data.trades24h,
+                liquidity: data.liquidity
+            }
+            marketData.value.lastFetch = now
+
+            console.log('✅ Market data updated:', { price: data.price, tvl: data.tvl })
+
+        } catch (error: any) {
+            console.error('❌ Market data fetch failed:', error)
+            marketData.value.error = error.message
+        } finally {
+            marketData.value.isLoading = false
+        }
+    }
+
+
+    if (process.client) {
+        fetchAllMarketData()
+        setInterval(() => {
+            fetchAllMarketData()
+        }, 300000)
+    }
 
     const toTokenAmount = (amount: number, symbol: string): string => {
         const decimals = getTokenDecimals(symbol)
@@ -97,21 +207,16 @@ export const useDexStore = defineStore('dex', () => {
 
     const fromTokenAmount = (amount: string, symbol: string): number => {
         const decimals = getTokenDecimals(symbol)
-        // ✅ FIX: Parse string to number FIRST, then do math
         return parseInt(amount) / Math.pow(10, decimals)
     }
 
-
-
     const fetchJupiterQuote = async () => {
-
         const amount = parseFloat(fromAmount.value)
 
         if (!amount || isNaN(amount) || amount <= 0) {
             estimatedTo.value = '0.00'
             return
         }
-
 
         const now = Date.now()
         if (now - lastQuoteTime.value < 500) {
@@ -130,36 +235,11 @@ export const useDexStore = defineStore('dex', () => {
                 throw new Error('Unsupported token selected')
             }
 
-
             const inputAmount = toTokenAmount(amount, fromToken.value.symbol)
 
             if (!inputAmount) {
                 throw new Error('Invalid input amount')
             }
-
-            const queryParams: Record<string, string> = {
-                inputMint,
-                outputMint,
-                amount: inputAmount,
-                slippageBps: Math.floor(slippage.value * 100).toString(),
-                onlyDirectRoutes: 'false'
-            }
-
-            const url = `${JUPITER_API_URL}/quote?${new URLSearchParams(queryParams)}`
-
-            console.log('🔄 Fetching Jupiter quote:', {
-                url,
-                queryParams
-            })
-
-            console.log('🔄 Fetching Jupiter quote:', {
-                from: `${amount} ${fromToken.value.symbol}`,
-                to: toToken.value.symbol,
-                slippage: `${slippage.value}%`
-            })
-
-
-            console.log('🔄 Calling server route...')
 
             const data = await $fetch('/api/jupiter-quote', {
                 query: {
@@ -169,25 +249,24 @@ export const useDexStore = defineStore('dex', () => {
                     slippageBps: Math.floor(slippage.value * 100).toString()
                 }
             }) as JupiterQuote
+
             currentQuote.value = data
 
             const outputAmount = fromTokenAmount(data.outAmount, toToken.value.symbol)
-
             estimatedTo.value = outputAmount.toFixed(4)
 
             if (data.priceImpactPct !== undefined) {
                 priceImpactValue.value = Math.abs(data.priceImpactPct)
             }
 
-            console.log('✅ Jupiter quote received:', {
+            console.log('Jupiter quote received:', {
                 input: `${amount} ${fromToken.value.symbol}`,
                 output: `${outputAmount.toFixed(4)} ${toToken.value.symbol}`,
-                priceImpact: `${data.priceImpactPct?.toFixed(3)}%`,
                 route: data.routePlan[0]?.swapInfo.label || 'Unknown'
             })
 
         } catch (error) {
-            console.error('❌ Failed to fetch Jupiter quote:', error)
+            console.error('Failed to fetch Jupiter quote:', error)
             quoteError.value = 'Failed to fetch live price'
 
             const val = Number(fromAmount.value)
@@ -195,13 +274,10 @@ export const useDexStore = defineStore('dex', () => {
             estimatedTo.value = (val * mockPrice).toFixed(4)
             priceImpactValue.value = val > 10 ? 2.4 : (val > 5 ? 0.8 : 0.1)
 
-            console.log('⚠️ Using fallback mock price:', estimatedTo.value)
-
         } finally {
             isLoadingQuote.value = false
         }
     }
-
 
     const TIMEFRAME_CONFIG: Record<Timeframe, { candles: number, interval: number }> = {
         '1m': { candles: 60, interval: 1 },
@@ -211,7 +287,6 @@ export const useDexStore = defineStore('dex', () => {
         '4H': { candles: 42, interval: 240 },
         '1D': { candles: 30, interval: 1440 }
     }
-
 
     const generateMockCandles = (timeframe: Timeframe = '15m') => {
         const config = TIMEFRAME_CONFIG[timeframe]
@@ -238,7 +313,6 @@ export const useDexStore = defineStore('dex', () => {
                 volume: parseFloat(volume.toFixed(2))
             })
             lastClose = close
-
         }
         return candles
     }
@@ -246,8 +320,6 @@ export const useDexStore = defineStore('dex', () => {
     const formatTimeForTimeframe = (date: Date, timeframe: Timeframe): string => {
         if (timeframe === '1D') {
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        } else if (timeframe === '4H' || timeframe === '1H') {
-            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         } else {
             return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }
@@ -260,7 +332,8 @@ export const useDexStore = defineStore('dex', () => {
         currentTimeframe.value = timeframe
         chartData.value = generateMockCandles(timeframe)
     }
-    const isSwapping = ref(false);
+
+    const isSwapping = ref(false)
 
     const executeSwap = async (): Promise<ExecuteSwapResult> => {
         const wallet = usePhantomWallet()
@@ -278,7 +351,6 @@ export const useDexStore = defineStore('dex', () => {
         try {
             console.log('🔨 Building swap transaction...')
 
-            // Get swap transaction from Jupiter
             const response = await fetch('https://quote-api.jup.ag/v6/swap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -291,14 +363,12 @@ export const useDexStore = defineStore('dex', () => {
 
             const { swapTransaction } = await response.json()
 
-            // Deserialize
             const { VersionedTransaction } = await import('@solana/web3.js')
             const txBuf = Buffer.from(swapTransaction, 'base64')
             const transaction = VersionedTransaction.deserialize(txBuf)
 
             console.log('✍️ Signing transaction...')
 
-            // Sign
             await wallet.signTransaction(transaction)
 
             console.log('✅ Transaction signed (not sent - demo mode)')
@@ -323,17 +393,15 @@ export const useDexStore = defineStore('dex', () => {
         ).join('')
         wallet.value = { publicKey: mockKey, connected: true }
     }
+
     const swapTokens = () => {
         const temp = fromToken.value
         fromToken.value = toToken.value
         toToken.value = temp
     }
 
+    const slippage = ref(0.5)
 
-
-
-
-    const slippage = ref(0.5) // default 0.5%
     const updateSlippage = (value: number) => {
         const result = slippageSchema.safeParse(value)
         if (!result.success) return
@@ -352,19 +420,17 @@ export const useDexStore = defineStore('dex', () => {
 
     const updateFromAmount = (value: string) => {
         inputError.value = null
-        // Allow empty string (user is typing)
+
         if (value === '') {
             fromAmount.value = ''
             estimatedTo.value = '0.00'
             return
         }
 
-
         if (!/^\d*\.?\d*$/.test(value)) return
 
         const num = parseFloat(value)
         if (isNaN(num)) return
-
 
         const balance = walletBalances.value[fromToken.value.symbol] || 0
         if (num > balance) {
@@ -378,107 +444,46 @@ export const useDexStore = defineStore('dex', () => {
         }
     }
 
-    //watchers
     watch([fromToken, toToken], () => {
         if (fromAmount.value && fromAmount.value !== '0' && fromAmount.value !== '') {
             fetchJupiterQuote()
         }
     })
 
-    // Watch for slippage changes - refetch quote when user changes slippage
     watch(slippage, () => {
         if (fromAmount.value && fromAmount.value !== '0' && fromAmount.value !== '') {
             fetchJupiterQuote()
         }
     })
 
-
-    //orderBooking
-    const generateAsks = (): OrderBookRow[] => {
-        const basePrice = 150.35
-        return Array.from({ length: 12 }, (_, i) => {
-            const price = basePrice + (i * 0.05)
-            const amount = Math.random() * 50 + 5
-            return {
-                price: parseFloat(price.toFixed(2)),
-                amount: parseFloat(amount.toFixed(2)),
-                total: parseFloat((price * amount).toFixed(2))
-            }
-        }).reverse()
-    }
-
-    const generateBids = (): OrderBookRow[] => {
-        const basePrice = 150.30
-        return Array.from({ length: 12 }, (_, i) => {
-            const price = basePrice - (i * 0.05)
-            const amount = Math.random() * 50 + 5
-            return {
-                price: parseFloat(price.toFixed(2)),
-                amount: parseFloat(amount.toFixed(2)),
-                total: parseFloat((price * amount).toFixed(2))
-            }
-        })
-    }
-
-    const asks = ref<OrderBookRow[]>(generateAsks())
-    const bids = ref<OrderBookRow[]>(generateBids())
-
-
-    const spread = computed(() => {
-        if (asks.value.length === 0 || bids.value.length === 0) return 0
-
-        const lowestAsk = asks.value[asks.value.length - 1]  // ✅ Get the object first
-        const highestBid = bids.value[0]  // ✅ Get the object first
-
-        // ✅ Add null checks
-        if (!lowestAsk || !highestBid) return 0
-
-        return parseFloat((lowestAsk.price - highestBid.price).toFixed(2))
-    })
-
-    const spreadPercent = computed(() => {
-        if (asks.value.length === 0) return 0
-
-        const lowestAsk = asks.value[asks.value.length - 1]  // ✅ Get the object first
-
-        // ✅ Add null check
-        if (!lowestAsk) return 0
-
-        return parseFloat(((spread.value / lowestAsk.price) * 100).toFixed(3))
-    })
-
-    const midPrice = computed(() => {
-        if (asks.value.length === 0 || bids.value.length === 0) return 150.30
-
-        const lowestAsk = asks.value[asks.value.length - 1]  // ✅ Get the object first
-        const highestBid = bids.value[0]  // ✅ Get the object first
-
-        // ✅ Add null checks
-        if (!lowestAsk || !highestBid) return 150.30
-
-        return parseFloat(((lowestAsk.price + highestBid.price) / 2).toFixed(2))
-    })
-
-    const maxAskAmount = computed(() => {
-        if (asks.value.length === 0) return 1
-        return Math.max(...asks.value.map(a => a.amount))
-    })
-
-    const maxBidAmount = computed(() => {
-        if (bids.value.length === 0) return 1
-        return Math.max(...bids.value.map(b => b.amount))
-    })
-
-
     return {
-        tokens, fromToken, toToken, fromAmount,
-        wallet, estimatedTo, priceImpact, connectWallet,
-        executeSwap, isSwapping, swapTokens, maxBalance,
-        slippage, updateSlippage, slippageSchema,
-        updateFromAmount, minReceived, walletBalances, inputError,
-        chartData, currentTimeframe, updateTimeframe, asks, bids,
-        spread, spreadPercent, midPrice, maxAskAmount, maxBidAmount,
-        isLoadingQuote, quoteError, currentQuote,
-        fetchJupiterQuote
+        tokens,
+        fromToken,
+        toToken,
+        fromAmount,
+        wallet,
+        estimatedTo,
+        priceImpact,
+        connectWallet,
+        executeSwap,
+        isSwapping,
+        swapTokens,
+        maxBalance,
+        slippage,
+        updateSlippage,
+        slippageSchema,
+        updateFromAmount,
+        minReceived,
+        walletBalances,
+        inputError,
+        chartData,
+        currentTimeframe,
+        updateTimeframe,
+        isLoadingQuote,
+        quoteError,
+        currentQuote,
+        fetchJupiterQuote,
+        marketData,
+        fetchAllMarketData
     }
 })

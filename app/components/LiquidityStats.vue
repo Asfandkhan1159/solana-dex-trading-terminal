@@ -1,40 +1,11 @@
 <script setup lang="ts">
-interface Stats {
-  tvl: number
-  volume24h: number
-  trades24h: number
-  liquidity: number
-}
-
-const stats = ref<Stats>({
-  tvl: 0,
-  volume24h: 0,
-  trades24h: 0,
-  liquidity: 0
-})
-
-const isLoading = ref(true)
-const lastUpdate = ref<Date>(new Date())
+const dexStore = useDexStore()
+const { marketData } = storeToRefs(dexStore)
 
 
-const fetchStats = async () => {
-  isLoading.value = true
-  
-  try {
-   
-    const response = await fetch('/api/liquidity-stats')
-    const data = await response.json()
-    
-    stats.value = data
-    lastUpdate.value = new Date()
-    
-    console.log(' Liquidity stats updated:', data)
-  } catch (error) {
-    console.error('Failed to fetch stats:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
+const stats = computed(() => marketData.value.stats)
+const isLoading = computed(() => marketData.value.isLoading)
+const lastUpdate = computed(() => new Date(marketData.value.lastFetch))
 
 const formatNumber = (num: number): string => {
   if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`
@@ -49,20 +20,11 @@ const formatCount = (num: number): string => {
   return num.toString()
 }
 
-
 const timeSinceUpdate = computed(() => {
   const now = new Date()
   const diff = Math.floor((now.getTime() - lastUpdate.value.getTime()) / 1000)
   if (diff < 60) return `${diff}s ago`
   return `${Math.floor(diff / 60)}m ago`
-})
-
-
-onMounted(() => {
-  fetchStats()
-  
- 
-  setInterval(fetchStats, 300000)
 })
 </script>
 

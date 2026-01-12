@@ -17,12 +17,14 @@ export default defineNuxtConfig({
         '@': '/',
         '~': '/'
       }
+    },
+    optimizeDeps: {
+      include: ['@solana/web3.js']
     }
   },
 
-  // ✅ DISABLE broken type checking in dev
   typescript: {
-    typeCheck: false,  // We'll use 'npx nuxt typecheck' manually
+    typeCheck: false,
     strict: true
   },
 
@@ -30,6 +32,18 @@ export default defineNuxtConfig({
     heliusApiKey: process.env.HELIUS_API_KEY,
     public: {
       heliusApiKey: process.env.HELIUS_API_KEY
+    }
+  },
+
+  // ✅ FIX: Configure Nitro for Vercel
+  nitro: {
+    preset: 'vercel',
+    // ✅ Don't bundle @solana/web3.js on server
+    externals: {
+      inline: ['@solana/web3.js']
+    },
+    rollupConfig: {
+      external: ['@solana/web3.js']
     }
   }
 })

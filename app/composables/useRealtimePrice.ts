@@ -11,7 +11,7 @@ export const useRealtimePrice = () => {
         if (typeof window === 'undefined') return
 
         try {
-            // ✅ Use native WebSocket (Binance)
+
             ws = new WebSocket('wss://stream.binance.com:9443/ws/solusdt@trade')
 
             ws.onopen = () => {

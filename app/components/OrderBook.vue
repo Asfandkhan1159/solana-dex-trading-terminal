@@ -2,7 +2,7 @@
 const dexStore = useDexStore()
 const { marketData } = storeToRefs(dexStore)
 
-// ✅ No API calls - just read from store
+
 const asks = computed(() => marketData.value.orderbook.asks || [])
 const bids = computed(() => marketData.value.orderbook.bids || [])
 const isLoading = computed(() => marketData.value.isLoading)

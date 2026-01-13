@@ -336,9 +336,7 @@ export const useDexStore = defineStore('dex', () => {
     const isSwapping = ref(false)
     // just for vercel deployment, will fix in the next push
     const executeSwap = async (): Promise<ExecuteSwapResult> => {
-        if (!process.client) {
-            throw new Error('Swap is client-only')
-        }
+        if (!process.client) throw new Error('Swaps are client-only — aborting on server')
 
         const wallet = usePhantomWallet()
 
@@ -373,8 +371,9 @@ export const useDexStore = defineStore('dex', () => {
                 const solana = await import('@solana/web3.js')
                 VersionedTransaction = solana.VersionedTransaction
             } else {
-                throw new Error('Solana SDK loaded on server')
+                throw new Error('Solana SDK loading on server is blocked')
             }
+
             const txBuf = Buffer.from(swapTransaction, 'base64')
             const transaction = VersionedTransaction.deserialize(txBuf)
 

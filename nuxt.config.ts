@@ -15,11 +15,25 @@ export default defineNuxtConfig({
     resolve: {
       alias: {
         '@': '/',
-        '~': '/'
-      }
+        '~': '/',
+
+        'eventemitter3': 'eventemitter3'
+      },
+
+      dedupe: ['eventemitter3']
     },
     optimizeDeps: {
-      include: ['@solana/web3.js']
+      include: [
+        '@solana/web3.js',
+        'eventemitter3'
+      ],
+      exclude: [],
+      esbuildOptions: {
+        target: 'esnext',
+        define: {
+          global: 'globalThis'
+        }
+      }
     }
   },
 
@@ -30,20 +44,13 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     heliusApiKey: process.env.HELIUS_API_KEY,
+    birdeyeApiKey: process.env.BIRDEYE_API_KEY,
     public: {
       heliusApiKey: process.env.HELIUS_API_KEY
     }
   },
 
-  // ✅ FIX: Configure Nitro for Vercel
   nitro: {
-    preset: 'vercel',
-    // ✅ Don't bundle @solana/web3.js on server
-    externals: {
-      inline: ['@solana/web3.js']
-    },
-    rollupConfig: {
-      external: ['@solana/web3.js']
-    }
+    preset: 'vercel'
   }
 })

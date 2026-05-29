@@ -66,11 +66,18 @@ export const usePhantomWallet = () => {
 
         const provider = getProvider()
 
-        if (!provider) {
-            alert('Phantom wallet not detected!\n\n1. Install Phantom extension\n2. Refresh this page\n3. Try again')
-            window.open('https://phantom.app/', '_blank')
-            throw new Error('Phantom wallet not installed')
-        }
+       if (!provider) {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+    if (isMobile) {
+        const dappUrl = window.location.href
+        const phantomDeepLink = `https://phantom.app/ul/browse/${encodeURIComponent(dappUrl)}?ref=${encodeURIComponent(window.location.origin)}`
+        window.location.href = phantomDeepLink
+    } else {
+        alert('Phantom wallet not detected!\n\n1. Install Phantom extension\n2. Refresh this page\n3. Try again')
+        window.open('https://phantom.app/', '_blank')
+    }
+    throw new Error('Phantom wallet not installed')
+}
 
         connecting.value = true
 

@@ -1,4 +1,4 @@
-# 🚀 Solana DEX Trading Terminal '
+# 🚀 Solana DEX Trading Terminal
 
 A professional, production-ready decentralized exchange interface for Solana, built with modern web technologies and real-time data streaming.
 

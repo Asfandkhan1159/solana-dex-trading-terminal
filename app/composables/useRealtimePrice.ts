@@ -42,7 +42,7 @@ export const useRealtimePrice = () => {
                 connected.value = false
                 console.log('🔌 WebSocket disconnected, reconnecting...')
 
-                // Auto-reconnect after 5 seconds
+                //reconnect after 5 seconds
                 reconnectTimeout = setTimeout(() => {
                     connect()
                 }, 5000)

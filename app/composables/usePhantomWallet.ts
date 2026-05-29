@@ -66,6 +66,7 @@ export const usePhantomWallet = () => {
 
         const provider = getProvider()
 
+        //handles mobile wallet integration
        if (!provider) {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     if (isMobile) {
